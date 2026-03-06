@@ -1,5 +1,7 @@
 version: 2
 
+project_name: buck
+
 builds:
   - main: .
     binary: buck
@@ -18,7 +20,8 @@ archives:
   - format: tar.gz
 
 brews:
-  - repository:
+  - name: buck
+    repository:
       owner: chinhstringee
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"

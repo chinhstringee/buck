@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**buck** — Multi-repo orchestration tool for Bitbucket Cloud. Supports API token (default) and OAuth 2.0 with PKCE authentication.
+**buck** — Multi-repo orchestration tool for Bitbucket Cloud. Create branches and pull requests across multiple repositories simultaneously. Supports API token (default) and OAuth 2.0 with PKCE authentication.
 
 - **Module**: `github.com/chinhstringee/buck`
 - **Go version**: 1.25.0
@@ -77,7 +77,8 @@ main.go → cmd.Execute()
   ├── login.go        OAuth login flow
   ├── list.go         List workspace repos
   ├── create.go       Create branches across repos
-  └── pr.go           Create pull requests across repos
+  ├── pr.go           Create pull requests across repos
+  └── setup.go        Interactive API token configuration
   │
   internal/     (Private packages)
   ├── auth/         OAuth 2.0 + PKCE flow, token persistence (~/.buck/token.json)
@@ -85,12 +86,13 @@ main.go → cmd.Execute()
   ├── config/       YAML config loading with env var expansion (${VAR_NAME})
   ├── creator/      Parallel branch creation orchestrator (goroutines + sync)
   ├── gitutil/      Git context detection (current branch, Bitbucket remote parsing)
+  ├── matcher/      Fuzzy repo slug matching
   └── pullrequest/  Parallel PR creation orchestrator (goroutines + sync)
 ```
 
 **Key data flow for `create` command**: Config loading → Token retrieval (auto-refresh) → Repo resolution (flags/groups/interactive) → Concurrent branch creation → Colored result display.
 
-**Key data flow for `pr` command**: Config loading → Token retrieval → Repo resolution → Per-repo: GetRepository (mainbranch) + CreatePullRequest → Colored result display with PR URLs.
+**Key data flow for `pr` command**: Config loading → Token retrieval → Repo resolution → Per-repo: ListCommits (description) + CreatePullRequest → Colored result display with PR URLs.
 
 **Repo resolution order**: `--interactive` flag > `--repos` flag > `--group` flag > interactive multi-select (charmbracelet/huh).
 

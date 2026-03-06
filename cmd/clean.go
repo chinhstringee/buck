@@ -35,6 +35,9 @@ func init() {
 	cleanCmd.Flags().BoolVarP(&cleanFlagYes, "yes", "y", false, "skip confirmation prompt")
 	cleanCmd.Flags().BoolVar(&cleanFlagMerged, "merged", false, "delete all branches with merged PRs")
 
+	_ = cleanCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
+	_ = cleanCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
+
 	rootCmd.AddCommand(cleanCmd)
 }
 

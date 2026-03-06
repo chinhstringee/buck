@@ -32,6 +32,9 @@ func init() {
 	statusCmd.Flags().BoolVar(&statusFlagMine, "mine", false, "show only my PRs")
 	statusCmd.Flags().StringVar(&statusFlagAuthor, "author", "", "filter by author nickname")
 
+	_ = statusCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
+	_ = statusCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
+
 	rootCmd.AddCommand(statusCmd)
 }
 

@@ -27,6 +27,8 @@ func init() {
 	prMergeCmd.Flags().BoolVar(&prMergeFlagCloseBranch, "close-branch", false, "close source branch after merge")
 	prMergeCmd.Flags().BoolVarP(&prMergeFlagYes, "yes", "y", false, "skip confirmation prompt")
 
+	_ = prMergeCmd.RegisterFlagCompletionFunc("strategy", completeStaticValues([]string{"merge_commit", "squash", "fast_forward"}))
+
 	prCmd.AddCommand(prMergeCmd)
 }
 

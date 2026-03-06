@@ -32,6 +32,10 @@ func init() {
 	createCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "preview actions without executing")
 	createCmd.Flags().BoolVarP(&flagInteractive, "interactive", "i", false, "select repos interactively")
 
+	_ = createCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
+	_ = createCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
+	_ = createCmd.RegisterFlagCompletionFunc("from", completeBranchNames)
+
 	rootCmd.AddCommand(createCmd)
 }
 

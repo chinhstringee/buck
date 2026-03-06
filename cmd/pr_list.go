@@ -29,6 +29,8 @@ func init() {
 	prListCmd.Flags().BoolVar(&prListFlagMine, "mine", false, "show only my PRs")
 	prListCmd.Flags().StringVar(&prListFlagAuthor, "author", "", "filter by author nickname")
 
+	_ = prListCmd.RegisterFlagCompletionFunc("state", completeStaticValues([]string{"OPEN", "MERGED", "DECLINED", "SUPERSEDED"}))
+
 	prCmd.AddCommand(prListCmd)
 }
 

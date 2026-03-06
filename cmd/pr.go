@@ -37,6 +37,10 @@ func init() {
 	// Create-only flag
 	prCmd.Flags().StringVarP(&prFlagDestination, "destination", "d", "", "destination branch (default: master)")
 
+	_ = prCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
+	_ = prCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
+	_ = prCmd.RegisterFlagCompletionFunc("destination", completeBranchNames)
+
 	rootCmd.AddCommand(prCmd)
 }
 

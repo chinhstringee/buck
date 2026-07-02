@@ -16,6 +16,7 @@ var (
 	prFlagRepos       string
 	prFlagDryRun      bool
 	prFlagDestination string
+	prFlagTitle       string
 	prFlagInteractive bool
 )
 
@@ -34,8 +35,9 @@ func init() {
 	prCmd.PersistentFlags().BoolVar(&prFlagDryRun, "dry-run", false, "preview actions without executing")
 	prCmd.PersistentFlags().BoolVarP(&prFlagInteractive, "interactive", "i", false, "select repos interactively")
 
-	// Create-only flag
+	// Create-only flags
 	prCmd.Flags().StringVarP(&prFlagDestination, "destination", "d", "", "destination branch (default: master)")
+	prCmd.Flags().StringVarP(&prFlagTitle, "title", "t", "", "PR title (default: derived from branch name)")
 
 	_ = prCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
 	_ = prCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
@@ -120,7 +122,7 @@ func runPR(cmd *cobra.Command, args []string) error {
 	bold.Printf("Creating PRs from %q across %d repos...\n", branchName, len(repos))
 
 	pc := pullrequest.NewPRCreator(client)
-	results := pc.CreatePRs(workspace, repos, branchName, prFlagDestination)
+	results := pc.CreatePRs(workspace, repos, branchName, prFlagDestination, prFlagTitle)
 	pullrequest.PrintResults(results)
 
 	return nil

@@ -34,13 +34,19 @@ func NewPRCreator(client *bitbucket.Client) *PRCreator {
 }
 
 // CreatePRs creates pull requests in multiple repos concurrently.
-// If destination is empty, "master" is used.
-func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, destination string) []Result {
+// If destination is empty, "master" is used. If title is empty, a
+// human-readable title is derived from the branch name.
+func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, destination, title string) []Result {
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
 		results []Result
 	)
+
+	prTitle := strings.TrimSpace(title)
+	if prTitle == "" {
+		prTitle = formatBranchTitle(branchName)
+	}
 
 	for _, repo := range repos {
 		wg.Add(1)
@@ -60,7 +66,7 @@ func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, des
 			}
 
 			req := bitbucket.CreatePullRequestRequest{
-				Title:       formatBranchTitle(branchName),
+				Title:       prTitle,
 				Description: description,
 				Source:      bitbucket.PRBranchRef{Branch: bitbucket.PRBranchName{Name: branchName}},
 				Destination: bitbucket.PRBranchRef{Branch: bitbucket.PRBranchName{Name: dest}},

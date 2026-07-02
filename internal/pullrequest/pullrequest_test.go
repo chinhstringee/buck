@@ -122,7 +122,7 @@ func TestCreatePRs_AllSuccess(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", repos, "feature/x", "")
+	results := pc.CreatePRs("ws", repos, "feature/x", "", "")
 
 	if len(results) != 3 {
 		t.Fatalf("len(results) = %d, want 3", len(results))
@@ -159,7 +159,7 @@ func TestCreatePRs_PartialFailure(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", repos, "feature/x", "")
+	results := pc.CreatePRs("ws", repos, "feature/x", "", "")
 
 	if len(results) != 3 {
 		t.Fatalf("len(results) = %d, want 3", len(results))
@@ -199,7 +199,7 @@ func TestCreatePRs_AllFailure(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", repos, "feature/x", "")
+	results := pc.CreatePRs("ws", repos, "feature/x", "", "")
 
 	for _, r := range results {
 		if r.Success {
@@ -216,7 +216,7 @@ func TestCreatePRs_EmptyRepoList(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", []string{}, "feature/x", "")
+	results := pc.CreatePRs("ws", []string{}, "feature/x", "", "")
 
 	if len(results) != 0 {
 		t.Errorf("len(results) = %d, want 0", len(results))
@@ -236,7 +236,7 @@ func TestCreatePRs_SortedBySlug(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", repos, "feature/x", "")
+	results := pc.CreatePRs("ws", repos, "feature/x", "", "")
 
 	expected := []string{"alpha", "beta", "gamma", "zeta"}
 	for i, want := range expected {
@@ -284,7 +284,7 @@ func TestCreatePRs_Concurrency(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", repos, "feature/x", "")
+	results := pc.CreatePRs("ws", repos, "feature/x", "", "")
 
 	if len(results) != 20 {
 		t.Errorf("len(results) = %d, want 20", len(results))
@@ -323,7 +323,7 @@ func TestCreatePRs_DestinationOverride(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", []string{"repo-a", "repo-b"}, "feature/x", "develop")
+	results := pc.CreatePRs("ws", []string{"repo-a", "repo-b"}, "feature/x", "develop", "")
 
 	if len(results) != 2 {
 		t.Fatalf("len(results) = %d, want 2", len(results))
@@ -370,7 +370,7 @@ func TestCreatePRs_DefaultDestinationMaster(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", []string{"repo-a"}, "feature/x", "")
+	results := pc.CreatePRs("ws", []string{"repo-a"}, "feature/x", "", "")
 
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
@@ -413,7 +413,7 @@ func TestCreatePRs_EmptyDestinationWhitespaceUsesMaster(t *testing.T) {
 	defer srv.Close()
 
 	pc := newPRCreatorForServer(srv)
-	results := pc.CreatePRs("ws", []string{"test-repo"}, "feature/x", "   ")
+	results := pc.CreatePRs("ws", []string{"test-repo"}, "feature/x", "   ", "")
 
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
@@ -423,6 +423,52 @@ func TestCreatePRs_EmptyDestinationWhitespaceUsesMaster(t *testing.T) {
 	}
 	if gotBody.Destination.Branch.Name != "master" {
 		t.Errorf("destination = %q, want %q (whitespace destination fallback)", gotBody.Destination.Branch.Name, "master")
+	}
+}
+
+func TestCreatePRs_CustomTitle(t *testing.T) {
+	var gotBody bitbucket.CreatePullRequestRequest
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+
+		if r.Method == http.MethodGet {
+			if len(parts) >= 5 && parts[4] == "commits" {
+				json.NewEncoder(w).Encode(bitbucket.PaginatedCommits{})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(bitbucket.PullRequest{
+			ID:    1,
+			Links: bitbucket.PRLinks{HTML: bitbucket.LinkRef{Href: "https://bb.org/pr/1"}},
+		})
+	}))
+	defer srv.Close()
+
+	pc := newPRCreatorForServer(srv)
+
+	// Explicit title must be sent as-is, overriding the branch-derived one.
+	results := pc.CreatePRs("ws", []string{"test-repo"}, "feature/SPT-1-x", "release", "My Custom Title")
+	if !results[0].Success {
+		t.Fatalf("expected success, got error: %s", results[0].Error)
+	}
+	if gotBody.Title != "My Custom Title" {
+		t.Errorf("title = %q, want %q", gotBody.Title, "My Custom Title")
+	}
+
+	// Whitespace-only title falls back to the branch-derived title.
+	results = pc.CreatePRs("ws", []string{"test-repo"}, "feature/SPT-1-x", "release", "   ")
+	if !results[0].Success {
+		t.Fatalf("expected success, got error: %s", results[0].Error)
+	}
+	if want := "Feature/SPT-1 x"; gotBody.Title != want {
+		t.Errorf("title = %q, want %q (branch-derived fallback)", gotBody.Title, want)
 	}
 }
 

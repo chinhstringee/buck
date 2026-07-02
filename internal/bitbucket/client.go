@@ -46,7 +46,9 @@ type Client struct {
 func NewClient(authApplier AuthApplier) *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			// PR creation can exceed 30s while Bitbucket computes the diff
+			// for large repos, so keep this generous.
+			Timeout: 90 * time.Second,
 		},
 		authApplier: authApplier,
 	}

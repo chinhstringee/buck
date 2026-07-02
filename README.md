@@ -66,6 +66,7 @@ buck create <branch> --dry-run
 buck pr                       # auto-detect branch and repo from CWD
 buck pr <branch> --repos repo-a,repo-b
 buck pr <branch> --group backend --destination develop
+buck pr <branch> --repos repo-a --title "Add login feature"
 buck pr <branch> --dry-run
 
 # Other
@@ -83,6 +84,7 @@ buck completion zsh           # generate shell completion script
 | `--group` | `-g` | Use a predefined repo group from config |
 | `--from` | `-f` | Source branch (overrides config default) |
 | `--destination` | `-d` | PR destination branch (default: master) |
+| `--title` | `-t` | PR title (default: derived from branch name) |
 | `--dry-run` | | Preview without executing |
 | `--interactive` | `-i` | Force interactive selection |
 | `--config` | | Custom config file path |

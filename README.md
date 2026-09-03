@@ -68,6 +68,9 @@ buck pr <branch> --repos repo-a,repo-b
 buck pr <branch> --group backend --destination develop
 buck pr <branch> --repos repo-a --title "Add login feature"
 buck pr <branch> --dry-run
+buck pr edit 23 --repos repo-a --title "Updated title"
+buck pr edit 23 --repos repo-a --body-file description.md
+buck pr edit 23 --repos repo-a --body-file - < description.md
 
 # Other
 buck list                     # list workspace repos

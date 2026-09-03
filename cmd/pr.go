@@ -22,7 +22,7 @@ var (
 
 var prCmd = &cobra.Command{
 	Use:   "pr [branch-name]",
-	Short: "Pull request operations (create, merge, decline, approve, list)",
+	Short: "Pull request operations (create, edit, merge, decline, approve, list)",
 	Long:  "Create and manage pull requests across multiple Bitbucket repos.\nRun without subcommand to create PRs (backward compatible).",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runPR,

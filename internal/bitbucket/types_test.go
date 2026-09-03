@@ -178,3 +178,21 @@ func TestAPIError_EmptyMessage(t *testing.T) {
 		t.Errorf("expected empty message, got %q", apiErr.Error.Message)
 	}
 }
+
+func TestPRUpdateRequest_IncludesEmptyEditedBody(t *testing.T) {
+	empty := ""
+	data, err := json.Marshal(PRUpdateRequest{Description: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload struct {
+		Description *string `json:"description"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Description == nil || *payload.Description != "" {
+		t.Fatalf("description = %v, want an included empty string", payload.Description)
+	}
+}

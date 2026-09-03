@@ -291,6 +291,33 @@ buck pr feature/auth --interactive
 
 ---
 
+### `buck pr edit [<number> | <branch>]`
+
+Edit the title or body of one pull request. When the selector is omitted, Buck finds the open pull request for the current branch and repository.
+
+Exactly one repository must be selected.
+
+#### Options
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--title` | `-t` | Set the new title |
+| `--body` | `-b` | Set the new body |
+| `--body-file` | `-F` | Read the body from a file; use `-` for standard input |
+| `--repos` | `-r` | Select one repository |
+| `--dry-run` | | Preview the target and edited fields |
+
+`--body` and `--body-file` cannot be used together.
+
+```bash
+buck pr edit 23 --repos api-repo --title "Updated title"
+buck pr edit 23 --repos api-repo --body-file description.md
+buck pr edit 23 --repos api-repo --body-file - < description.md
+buck pr edit --body "Updated from the current branch"
+```
+
+---
+
 ## Configuration
 
 ### File Locations

@@ -140,8 +140,8 @@ type MergePRRequest struct {
 
 // PRUpdateRequest is the PUT body for updating a pull request.
 type PRUpdateRequest struct {
-	Title       string       `json:"title,omitempty"`
-	Description string       `json:"description,omitempty"`
+	Title       *string      `json:"title,omitempty"`
+	Description *string      `json:"description,omitempty"`
 	Reviewers   []PRReviewer `json:"reviewers,omitempty"`
 }
 

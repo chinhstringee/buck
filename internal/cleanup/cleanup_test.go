@@ -79,6 +79,23 @@ func TestDeleteBranch_ProtectedBranch(t *testing.T) {
 	}
 }
 
+func TestDeleteBranch_ReleaseIsProtectedByDefault(t *testing.T) {
+	// "release" is the shared TEST-promotion branch (feature -> release -> master);
+	// buck clean must refuse to delete it without requiring an explicit
+	// --protected-branches config entry.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("should not make API call for the release branch")
+	}))
+	defer srv.Close()
+
+	bc := newCleanerForServer(srv, nil)
+	results := bc.DeleteBranch("ws", []string{"repo-a"}, "release")
+
+	if !results[0].Skipped {
+		t.Error("expected Skipped=true for release branch")
+	}
+}
+
 func TestDeleteBranch_CustomProtected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("should not make API call for protected branch")
@@ -236,7 +253,7 @@ func TestDeleteMergedBranches_Success(t *testing.T) {
 
 func TestNewBranchCleaner_DefaultProtected(t *testing.T) {
 	bc := NewBranchCleaner(nil, nil)
-	for _, name := range []string{"main", "master", "develop", "staging", "production"} {
+	for _, name := range []string{"main", "master", "develop", "staging", "production", "release"} {
 		if !bc.isProtected(name) {
 			t.Errorf("%q should be protected by default", name)
 		}

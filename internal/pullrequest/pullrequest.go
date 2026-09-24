@@ -35,8 +35,10 @@ func NewPRCreator(client *bitbucket.Client) *PRCreator {
 
 // CreatePRs creates pull requests in multiple repos concurrently.
 // If destination is empty, "master" is used. If title is empty, a
-// human-readable title is derived from the branch name.
-func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, destination, title string) []Result {
+// human-readable title is derived from the branch name. If descriptionOverride
+// is non-nil, its value is used as the PR description instead of the
+// commit-derived text (even when empty).
+func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, destination, title string, descriptionOverride *string) []Result {
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
@@ -58,11 +60,17 @@ func (pc *PRCreator) CreatePRs(workspace string, repos []string, branchName, des
 				dest = defaultDestinationBranch
 			}
 
-			// Build description from commits (fallback to static text on error)
-			description := "Automated PR created by buck"
-			commits, err := pc.client.ListCommits(workspace, repoSlug, branchName, dest)
-			if err == nil && len(commits) > 0 {
-				description = buildDescription(commits)
+			// Description: explicit override wins; otherwise build from commits
+			// (fallback to static text on error).
+			var description string
+			if descriptionOverride != nil {
+				description = *descriptionOverride
+			} else {
+				description = "Automated PR created by buck"
+				commits, err := pc.client.ListCommits(workspace, repoSlug, branchName, dest)
+				if err == nil && len(commits) > 0 {
+					description = buildDescription(commits)
+				}
 			}
 
 			req := bitbucket.CreatePullRequestRequest{

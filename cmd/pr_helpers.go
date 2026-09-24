@@ -3,8 +3,11 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/chinhstringee/buck/internal/bitbucket"
 	"github.com/chinhstringee/buck/internal/config"
@@ -86,6 +89,38 @@ func resolvePRContext(branchArg string) (*prContext, error) {
 		client:     client,
 		cfg:        cfg,
 	}, nil
+}
+
+// resolveBodyOverride resolves a --body/--body-file flag pair into override
+// text. body is the value already bound to --body by cobra; bodyFile is the
+// --body-file path ("-" reads from cmd's stdin). The two flags are mutually
+// exclusive. provided is false when neither flag was set on cmd, signaling
+// that default (non-override) behavior should be used.
+func resolveBodyOverride(cmd *cobra.Command, body, bodyFile string) (text string, provided bool, err error) {
+	bodyProvided := cmd.Flags().Changed("body")
+	bodyFileProvided := cmd.Flags().Changed("body-file")
+	if bodyProvided && bodyFileProvided {
+		return "", false, fmt.Errorf("specify only one of --body or --body-file")
+	}
+
+	if bodyFileProvided {
+		var data []byte
+		if bodyFile == "-" {
+			data, err = io.ReadAll(cmd.InOrStdin())
+		} else {
+			data, err = os.ReadFile(bodyFile)
+		}
+		if err != nil {
+			return "", false, fmt.Errorf("read body file: %w", err)
+		}
+		return string(data), true, nil
+	}
+
+	if bodyProvided {
+		return body, true, nil
+	}
+
+	return "", false, nil
 }
 
 // confirmAction prompts the user for confirmation. Returns true if confirmed.

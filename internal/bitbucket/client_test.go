@@ -695,3 +695,135 @@ func TestFindPRByBranch_NotFound(t *testing.T) {
 		t.Errorf("error = %q, missing expected message", err.Error())
 	}
 }
+
+// ---------- GetBranch ----------
+
+func TestGetBranch_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Branch{Name: "feature/x", Target: BranchTarget{Hash: "abc1234567890"}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	branch, err := c.GetBranch("ws", "repo", "feature/x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if branch.Target.Hash != "abc1234567890" {
+		t.Errorf("Target.Hash = %q, want abc1234567890", branch.Target.Hash)
+	}
+}
+
+func TestGetBranch_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(APIError{Error: APIErrorDetail{Message: "Branch not found"}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.GetBranch("ws", "repo", "feature/gone")
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error = %q, want it to contain 404", err.Error())
+	}
+}
+
+// ---------- CommitsAhead ----------
+
+func TestCommitsAhead_Contained(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("pagelen"); got != "1" {
+			t.Errorf("pagelen = %q, want 1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedCommits{Values: []Commit{}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	commits, err := c.CommitsAhead("ws", "repo", "feature/x", "release", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 0 {
+		t.Errorf("len(commits) = %d, want 0 (contained)", len(commits))
+	}
+}
+
+func TestCommitsAhead_NotContained(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedCommits{Values: []Commit{{Hash: "deadbeef"}}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	commits, err := c.CommitsAhead("ws", "repo", "feature/x", "master", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Errorf("len(commits) = %d, want 1 (not contained)", len(commits))
+	}
+}
+
+func TestCommitsAhead_TargetMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(APIError{Error: APIErrorDetail{Message: "Commit not found"}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.CommitsAhead("ws", "repo", "feature/x", "no-such-branch", 1)
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error = %q, want it to contain 404", err.Error())
+	}
+}
+
+// ---------- FindAllPRsByBranch ----------
+
+func TestFindAllPRsByBranch_ReturnsEveryState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("state"); got != "" {
+			t.Errorf("state query = %q, want empty (no state filter sent)", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedPullRequests{
+			Values: []PullRequest{
+				{ID: 3865, State: "MERGED"},
+				{ID: 3907, State: "DECLINED"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	prs, err := c.FindAllPRsByBranch("ws", "repo", "feature/shared")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prs) != 2 {
+		t.Fatalf("len(prs) = %d, want 2", len(prs))
+	}
+}
+
+func TestFindAllPRsByBranch_InvalidBranchName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("should not make an API call for an invalid branch name")
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.FindAllPRsByBranch("ws", "repo", `bad"branch`)
+	if err == nil {
+		t.Fatal("expected error for branch name with illegal characters")
+	}
+}

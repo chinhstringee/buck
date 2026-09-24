@@ -6,6 +6,7 @@ Multi-repo orchestration tool for Bitbucket Cloud. Create branches and pull requ
 
 - **Branch creation** — Create the same branch across many repos in parallel
 - **Pull requests** — Open PRs across repos, or auto-detect from git context
+- **Branch status** — Per-repo head, containment in release/master, and PR state for one branch (read-only)
 - **Repository groups** — Define named groups in config for quick targeting
 - **Fuzzy matching** — Target repos by partial name (`--repos "api,web"`)
 - **Interactive selection** — TUI multi-select when no flags given
@@ -76,6 +77,10 @@ buck pr view <branch> --repos repo-a --state MERGED --full
 buck pr edit 23 --repos repo-a --title "Updated title"
 buck pr edit 23 --repos repo-a --body-file description.md
 buck pr edit 23 --repos repo-a --body-file - < description.md
+
+# Branch status across repos (read-only)
+buck branch-status <branch> --repos repo-a,repo-b             # head, containment in release/master, PRs
+buck branch-status <branch> --group backend --against release,master
 
 # Other
 buck list                     # list workspace repos

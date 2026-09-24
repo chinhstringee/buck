@@ -60,6 +60,10 @@ buck status --group backend
 buck status --mine
 buck status --author alice
 
+# Branch status across repos (read-only: head, containment, PR state)
+buck branch-status <branch> --repos repo-a,repo-b
+buck branch-status <branch> --group backend --against release,master
+
 # Branch cleanup
 buck clean <branch> --repos repo-a,repo-b --yes
 buck clean --merged --group backend --dry-run
@@ -107,6 +111,7 @@ main.go → cmd.Execute()
   ├── pr_reviewers.go Add reviewers to PRs across repos
   ├── pr_list.go      List PRs across repos with filters
   ├── status.go       PR status dashboard across repos
+  ├── branch_status.go Per-branch status across repos: head, containment, PR state (read-only)
   ├── clean.go        Branch cleanup (single or --merged)
   ├── setup.go        Interactive API token configuration
   └── completion.go   Shell completion generation + dynamic completers
@@ -133,6 +138,8 @@ main.go → cmd.Execute()
 **Key data flow for `pr merge/decline/approve`**: Config/auth → Repo resolution → Per-repo: FindPRByBranch → Action (merge/decline/approve) → Colored result display.
 
 **Key data flow for `status` command**: Config/auth → Repo resolution → Per-repo: ListPullRequests → Filter (--mine/--author) → Colored dashboard table.
+
+**Key data flow for `branch-status` command**: Config/auth → Repo resolution → Per-repo (concurrent): GetBranch (head; missing ⇒ "no branch", skips the rest for that repo) → per `--against` target: CommitsAhead(include=branch, exclude=target, pagelen=1) (empty ⇒ contained; missing target reported per-target) → FindAllPRsByBranch (single unfiltered call; Bitbucket returns every state) → Colored per-repo report. Read-only (GET only), no build-status column (2026-09-24 decision).
 
 **Key data flow for `clean` command**: Config/auth → Repo resolution → Per-repo: DeleteBranch (or ListMergedPRBranches → DeleteBranch for --merged) → Colored result display.
 

@@ -369,6 +369,51 @@ buck pr edit --body "Updated from the current branch"
 
 ---
 
+### `buck branch-status <branch-name>`
+
+Show where a branch stands across repos: head commit, whether it is contained
+in each `--against` branch, and every PR for the branch in any state (id +
+state). Read-only (GET only) — replaces `git merge-base --is-ancestor` per
+checkout plus ad-hoc REST reads.
+
+A branch missing in a repo reports `no branch` for that repo without failing
+the others. A target (`--against` entry) missing in a repo is reported only
+on that target's line.
+
+#### Options
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--against` | | Comma-separated branches to check containment against (default: `release,master`) |
+| `--repos` | `-r` | Comma-separated repo slugs |
+| `--group` | `-g` | Use predefined repo group from config |
+| `--interactive` | `-i` | Force interactive selection |
+
+```bash
+buck branch-status feature/auth --repos api-repo,web-repo
+buck branch-status feature/auth --group backend --against release,master
+```
+
+Output example:
+
+```
+Checking branch "feature/auth" against release, master across 2 repos...
+
+  api-repo
+    Head:        a1b2c3d
+    In release:  yes
+    In master:   no
+    PRs:         #3996 DECLINED
+
+  web-repo
+    Head:        e4f5a6b
+    In release:  yes
+    In master:   no
+    PRs:         #3865 MERGED, #3907 DECLINED
+```
+
+---
+
 ## Configuration
 
 ### File Locations

@@ -66,6 +66,63 @@ func PrintDashboard(results []RepoPRs) {
 	)
 }
 
+// PrintBranchStatus displays, per repo, a branch's head commit, containment
+// against each requested target branch, and all PRs for the branch in any
+// state.
+func PrintBranchStatus(results []BranchStatus) {
+	bold := color.New(color.Bold)
+	green := color.New(color.FgGreen).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+
+	for _, r := range results {
+		bold.Printf("\n  %s\n", r.RepoSlug)
+
+		if r.Head == "" && r.Error != "" {
+			fmt.Printf("    %s\n", red(r.Error))
+			continue
+		}
+
+		fmt.Printf("    Head:  %s\n", r.Head)
+		for _, c := range r.Containment {
+			label := fmt.Sprintf("In %s:", c.Target)
+			switch {
+			case c.Error != "":
+				fmt.Printf("    %-12s %s\n", label, yellow(c.Error))
+			case c.Contained:
+				fmt.Printf("    %-12s %s\n", label, green("yes"))
+			default:
+				fmt.Printf("    %-12s %s\n", label, red("no"))
+			}
+		}
+
+		switch {
+		case r.Error != "":
+			fmt.Printf("    %-12s %s\n", "PRs:", red(r.Error))
+		case len(r.PRs) == 0:
+			fmt.Printf("    %-12s (none)\n", "PRs:")
+		default:
+			parts := make([]string, len(r.PRs))
+			for i, pr := range r.PRs {
+				parts[i] = fmt.Sprintf("#%d %s", pr.ID, prStateColor(pr.State, green, yellow, red))
+			}
+			fmt.Printf("    %-12s %s\n", "PRs:", strings.Join(parts, ", "))
+		}
+	}
+}
+
+// prStateColor colors a PR state string for terminal display.
+func prStateColor(state string, green, yellow, red func(a ...interface{}) string) string {
+	switch state {
+	case "OPEN":
+		return green(state)
+	case "DECLINED", "SUPERSEDED":
+		return red(state)
+	default:
+		return yellow(state) // MERGED
+	}
+}
+
 func countApprovals(pr bitbucket.PullRequest) int {
 	count := 0
 	for _, p := range pr.Participants {

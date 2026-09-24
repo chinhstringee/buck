@@ -130,6 +130,56 @@ func (c *Client) ListCommits(workspace, repoSlug, include, exclude string) ([]Co
 	return page.Values, nil
 }
 
+// GetBranch returns a single branch, including the commit hash it points to.
+// Returns an error containing "404" when the branch does not exist in repoSlug.
+func (c *Client) GetBranch(workspace, repoSlug, branchName string) (*Branch, error) {
+	reqURL := fmt.Sprintf("%s/repositories/%s/%s/refs/branches/%s",
+		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), url.PathEscape(branchName))
+	var branch Branch
+	if err := c.doRequest("GET", reqURL, nil, &branch); err != nil {
+		return nil, fmt.Errorf("failed to get branch %q: %w", branchName, err)
+	}
+	return &branch, nil
+}
+
+// CommitsAhead returns up to pagelen commits reachable from include but not
+// from exclude — used to answer "is include contained in exclude?" (empty
+// result ⇒ contained) without fetching the full divergence. Returns an error
+// containing "404" when either include or exclude does not exist in repoSlug.
+func (c *Client) CommitsAhead(workspace, repoSlug, include, exclude string, pagelen int) ([]Commit, error) {
+	if pagelen <= 0 {
+		pagelen = 1
+	}
+	reqURL := fmt.Sprintf("%s/repositories/%s/%s/commits?include=%s&exclude=%s&pagelen=%d",
+		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug),
+		url.QueryEscape(include), url.QueryEscape(exclude), pagelen)
+
+	var page PaginatedCommits
+	if err := c.doRequest("GET", reqURL, nil, &page); err != nil {
+		return nil, fmt.Errorf("failed to list commits ahead: %w", err)
+	}
+	return page.Values, nil
+}
+
+// FindAllPRsByBranch returns every PR for a source branch regardless of
+// state (OPEN, MERGED, DECLINED, SUPERSEDED). Bitbucket Cloud ignores any
+// state filter once q=source.branch.name=... is present, so a single
+// unfiltered request already returns every state (verified live 2026-09-24).
+func (c *Client) FindAllPRsByBranch(workspace, repoSlug, branchName string) ([]PullRequest, error) {
+	if strings.ContainsAny(branchName, `"`) {
+		return nil, fmt.Errorf("invalid branch name: contains illegal characters")
+	}
+	query := fmt.Sprintf(`source.branch.name="%s"`, branchName)
+	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests?q=%s",
+		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), url.QueryEscape(query))
+
+	var page PaginatedPullRequests
+	if err := c.doRequest("GET", reqURL, nil, &page); err != nil {
+		return nil, fmt.Errorf("failed to find PRs for branch %q: %w", branchName, err)
+	}
+	return page.Values, nil
+}
+
 // ListPullRequests returns PRs for a repo filtered by state (default: OPEN).
 func (c *Client) ListPullRequests(workspace, repoSlug, state string) ([]PullRequest, error) {
 	if state == "" {

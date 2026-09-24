@@ -3,11 +3,35 @@ package bitbucket
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// hostRewriteTransport redirects requests built against the real Bitbucket
+// baseURL to a local httptest.Server, so exported methods that hardcode
+// baseURL (e.g. DeclinePR, ApprovePR) can be exercised end-to-end.
+type hostRewriteTransport struct {
+	base    http.RoundTripper
+	srvHost string
+}
+
+func (t *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	cloned := req.Clone(req.Context())
+	cloned.URL.Scheme = "http"
+	cloned.URL.Host = t.srvHost
+	return t.base.RoundTrip(cloned)
+}
+
+func newClientForServer(srv *httptest.Server) *Client {
+	transport := &hostRewriteTransport{
+		base:    http.DefaultTransport,
+		srvHost: srv.Listener.Addr().String(),
+	}
+	return NewClientWithHTTPClient(&http.Client{Transport: transport}, mockAuthApplier("tok"))
+}
 
 // newTestClient returns a Client pointed at the given httptest.Server URL.
 // It replaces the package-level baseURL by overriding the URL in each method
@@ -445,5 +469,52 @@ func TestDoRequest_Headers(t *testing.T) {
 	}
 	if gotAccept != "application/json" {
 		t.Errorf("Accept = %q, want application/json", gotAccept)
+	}
+}
+
+// ---------- DeclinePR / ApprovePR body ----------
+
+// bitbucketLikeActionServer mimics Bitbucket Cloud's real behavior for the
+// decline/approve/merge action endpoints: a POST that declares
+// "Content-Type: application/json" but carries a zero-length body is
+// rejected with 400 Bad Request. A body of "{}" (or any valid JSON object)
+// is accepted. This was confirmed against the real API on 2026-09-24: a
+// direct curl with `-d '{}'` succeeded (200) for the same PR that buck's
+// client failed to decline (400).
+func bitbucketLikeActionServer(t *testing.T, gotBody *[]byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		*gotBody = body
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Content-Type") == "application/json" && len(body) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(APIError{Error: APIErrorDetail{Message: "Bad request"}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PullRequest{ID: 1})
+	}))
+}
+
+func TestDeclinePR_SendsNonEmptyJSONBody(t *testing.T) {
+	var gotBody []byte
+	srv := bitbucketLikeActionServer(t, &gotBody)
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	if err := c.DeclinePR("ws", "repo", 42); err != nil {
+		t.Fatalf("DeclinePR returned error: %v (request body was %q)", err, gotBody)
+	}
+}
+
+func TestApprovePR_SendsNonEmptyJSONBody(t *testing.T) {
+	var gotBody []byte
+	srv := bitbucketLikeActionServer(t, &gotBody)
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	if err := c.ApprovePR("ws", "repo", 42); err != nil {
+		t.Fatalf("ApprovePR returned error: %v (request body was %q)", err, gotBody)
 	}
 }

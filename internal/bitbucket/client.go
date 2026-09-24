@@ -194,14 +194,18 @@ func (c *Client) MergePR(workspace, repoSlug string, prID int, req MergePRReques
 func (c *Client) DeclinePR(workspace, repoSlug string, prID int) error {
 	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests/%d/decline",
 		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), prID)
-	return c.doRequest("POST", reqURL, nil, nil)
+	// Bitbucket Cloud rejects a POST that declares Content-Type: application/json
+	// but carries a zero-length body (400 Bad Request), so send an empty JSON
+	// object rather than no body at all.
+	return c.doRequest("POST", reqURL, struct{}{}, nil)
 }
 
 // ApprovePR approves a pull request.
 func (c *Client) ApprovePR(workspace, repoSlug string, prID int) error {
 	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests/%d/approve",
 		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), prID)
-	return c.doRequest("POST", reqURL, nil, nil)
+	// See DeclinePR: an empty body with Content-Type: application/json is rejected.
+	return c.doRequest("POST", reqURL, struct{}{}, nil)
 }
 
 // UpdatePR updates a pull request (e.g., to add reviewers).

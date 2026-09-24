@@ -518,3 +518,180 @@ func TestApprovePR_SendsNonEmptyJSONBody(t *testing.T) {
 		t.Fatalf("ApprovePR returned error: %v (request body was %q)", err, gotBody)
 	}
 }
+
+// ---------- GetPullRequest ----------
+
+func TestGetPullRequest_Success(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PullRequest{
+			ID:          42,
+			Title:       "feature/x",
+			State:       "MERGED",
+			Description: "desc",
+			Source: PRBranchRef{
+				Branch: PRBranchName{Name: "feature/x"},
+				Commit: &PRCommitRef{Hash: "abcdef1234567890"},
+			},
+			Destination: PRBranchRef{Branch: PRBranchName{Name: "master"}},
+		})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	pr, err := c.GetPullRequest("ws", "repo", 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMethod != http.MethodGet {
+		t.Errorf("method = %q, want GET", gotMethod)
+	}
+	if want := "/2.0/repositories/ws/repo/pullrequests/42"; gotPath != want {
+		t.Errorf("path = %q, want %q", gotPath, want)
+	}
+	if pr.ID != 42 || pr.State != "MERGED" {
+		t.Errorf("pr = %+v, unexpected fields", pr)
+	}
+	if pr.Source.Commit == nil || pr.Source.Commit.Hash != "abcdef1234567890" {
+		t.Errorf("pr.Source.Commit = %+v, want hash abcdef1234567890", pr.Source.Commit)
+	}
+}
+
+func TestGetPullRequest_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(APIError{Error: APIErrorDetail{Message: "Pull request not found"}})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.GetPullRequest("ws", "repo", 999)
+	if err == nil {
+		t.Fatal("expected error for missing PR")
+	}
+	if !strings.Contains(err.Error(), "Pull request not found") {
+		t.Errorf("error %q does not mention API message", err.Error())
+	}
+}
+
+// ---------- FindPRsByBranch / FindPRByBranch ----------
+
+func TestFindPRsByBranch_MultipleMatches(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("state"); got != "DECLINED" {
+			t.Errorf("state query = %q, want DECLINED", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedPullRequests{
+			Values: []PullRequest{
+				{ID: 10, State: "DECLINED"},
+				{ID: 11, State: "DECLINED"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	prs, err := c.FindPRsByBranch("ws", "repo", "feature/shared", "DECLINED")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prs) != 2 {
+		t.Fatalf("len(prs) = %d, want 2", len(prs))
+	}
+}
+
+func TestFindPRsByBranch_FiltersByStateWhenAPIIgnoresIt(t *testing.T) {
+	// Regression: Bitbucket returns PRs in every state for this branch
+	// regardless of the requested state query param (verified live against
+	// stringee-react-library #3865 MERGED / #3907 DECLINED on the same
+	// branch). The client must filter the response itself.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedPullRequests{
+			Values: []PullRequest{
+				{ID: 3907, State: "DECLINED"},
+				{ID: 3865, State: "MERGED"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+
+	declined, err := c.FindPRsByBranch("ws", "repo", "feature/shared", "DECLINED")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(declined) != 1 || declined[0].ID != 3907 {
+		t.Errorf("DECLINED matches = %+v, want only PR 3907", declined)
+	}
+
+	merged, err := c.FindPRsByBranch("ws", "repo", "feature/shared", "MERGED")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(merged) != 1 || merged[0].ID != 3865 {
+		t.Errorf("MERGED matches = %+v, want only PR 3865", merged)
+	}
+
+	open, err := c.FindPRsByBranch("ws", "repo", "feature/shared", "OPEN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(open) != 0 {
+		t.Errorf("OPEN matches = %+v, want none", open)
+	}
+}
+
+func TestFindPRsByBranch_InvalidBranchName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("should not make an API call for an invalid branch name")
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.FindPRsByBranch("ws", "repo", `bad"branch`, "OPEN")
+	if err == nil {
+		t.Fatal("expected error for branch name with illegal characters")
+	}
+}
+
+func TestFindPRByBranch_UsesFirstMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedPullRequests{
+			Values: []PullRequest{{ID: 1, State: "OPEN"}, {ID: 2, State: "OPEN"}},
+		})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	pr, err := c.FindPRByBranch("ws", "repo", "feature/x", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pr.ID != 1 {
+		t.Errorf("pr.ID = %d, want 1 (first match)", pr.ID)
+	}
+}
+
+func TestFindPRByBranch_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(PaginatedPullRequests{})
+	}))
+	defer srv.Close()
+
+	c := newClientForServer(srv)
+	_, err := c.FindPRByBranch("ws", "repo", "feature/gone", "OPEN")
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if !strings.Contains(err.Error(), `no OPEN PR found for branch "feature/gone"`) {
+		t.Errorf("error = %q, missing expected message", err.Error())
+	}
+}

@@ -34,6 +34,10 @@ func mockManagerServer(t *testing.T, prByRepo map[string]bitbucket.PullRequest, 
 				json.NewEncoder(w).Encode(bitbucket.PaginatedPullRequests{})
 				return
 			}
+			if pr.State == "" {
+				// forEachRepo always looks up the OPEN PR for a branch.
+				pr.State = "OPEN"
+			}
 			json.NewEncoder(w).Encode(bitbucket.PaginatedPullRequests{
 				Values: []bitbucket.PullRequest{pr},
 			})
@@ -221,7 +225,7 @@ func TestForEachRepo_Concurrency(t *testing.T) {
 
 		if r.Method == http.MethodGet {
 			json.NewEncoder(w).Encode(bitbucket.PaginatedPullRequests{
-				Values: []bitbucket.PullRequest{{ID: 1}},
+				Values: []bitbucket.PullRequest{{ID: 1, State: "OPEN"}},
 			})
 			return
 		}

@@ -1,3 +1,6 @@
 buck
 .buck.yaml
 plans/
+
+# Local agent state (e.g. subagent memory)
+.claude/

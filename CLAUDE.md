@@ -42,9 +42,12 @@ buck create <branch-name> --dry-run
 buck pr                    # auto-detect branch and repo from git context
 buck pr <branch-name> --repos repo-a,repo-b
 buck pr <branch-name> --group backend --destination develop
+buck pr <branch-name> --repos repo-a --body-file description.md   # override commit-derived description
 buck pr <branch-name> --dry-run
 
 # PR management subcommands
+buck pr view <branch> --repos repo-a               # inspect one PR (read-only)
+buck pr view --id 42 --repos repo-a --state MERGED
 buck pr merge <branch> --repos repo-a --strategy squash --yes
 buck pr decline <branch> --group backend --yes
 buck pr approve <branch> --repos repo-a,repo-b
@@ -96,7 +99,8 @@ main.go → cmd.Execute()
   ├── list.go         List workspace repos
   ├── create.go       Create branches across repos
   ├── pr.go           PR parent command (backward compat: `buck pr <branch>` = create)
-  ├── pr_helpers.go   Shared PR subcommand context resolution
+  ├── pr_helpers.go   Shared PR subcommand context resolution + --body/--body-file reading
+  ├── pr_view.go      View a single PR's details (read-only; by branch or --id)
   ├── pr_merge.go     Merge PRs by branch name across repos
   ├── pr_decline.go   Decline PRs by branch name across repos
   ├── pr_approve.go   Approve PRs by branch name across repos
@@ -111,6 +115,7 @@ main.go → cmd.Execute()
   ├── auth/         OAuth 2.0 + PKCE flow, token persistence (~/.buck/token.json)
   ├── bitbucket/    REST API client + types + AuthApplier (api.bitbucket.org/2.0)
   ├── cleanup/      Parallel branch deletion orchestrator with protected branches
+  │                 (default: main, master, develop, staging, production, release)
   ├── config/       YAML config loading with env var expansion (${VAR_NAME})
   ├── creator/      Parallel branch creation orchestrator (goroutines + sync)
   ├── dashboard/    Concurrent PR fetcher + colored table display
@@ -121,7 +126,9 @@ main.go → cmd.Execute()
 
 **Key data flow for `create` command**: Config loading → Token retrieval (auto-refresh) → Repo resolution (flags/groups/interactive) → Concurrent branch creation → Colored result display.
 
-**Key data flow for `pr` command**: Config loading → Token retrieval → Repo resolution → Per-repo: ListCommits (description) + CreatePullRequest → Colored result display with PR URLs.
+**Key data flow for `pr` command**: Config loading → Token retrieval → Repo resolution → Per-repo: ListCommits (description, unless `--body`/`--body-file` overrides it) + CreatePullRequest → Colored result display with PR URLs.
+
+**Key data flow for `pr view`**: Config/auth → Repo resolution → `--id` set: GetPullRequest (single repo); otherwise Per-repo: FindPRsByBranch (client-side state filter — Bitbucket ignores `state` when combined with `q`) → single match prints detail, multiple matches list ids and ask for `--id`.
 
 **Key data flow for `pr merge/decline/approve`**: Config/auth → Repo resolution → Per-repo: FindPRByBranch → Action (merge/decline/approve) → Colored result display.
 

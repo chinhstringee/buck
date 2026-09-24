@@ -11,7 +11,7 @@ import (
 )
 
 // Default branches that should never be deleted.
-var defaultProtectedBranches = []string{"main", "master", "develop", "staging", "production"}
+var defaultProtectedBranches = []string{"main", "master", "develop", "staging", "production", "release"}
 
 // Result holds the outcome of a branch deletion for one repo.
 type Result struct {

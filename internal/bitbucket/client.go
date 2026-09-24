@@ -160,8 +160,10 @@ func (c *Client) GetCurrentUser() (*User, error) {
 	return &user, nil
 }
 
-// FindPRByBranch finds a PR by source branch name and state (default: OPEN).
-func (c *Client) FindPRByBranch(workspace, repoSlug, branchName, state string) (*PullRequest, error) {
+// FindPRsByBranch returns all PRs matching a source branch name and state
+// (default: OPEN). Multiple results are possible when several PRs (e.g. across
+// different states, or after a re-open) share the same source branch.
+func (c *Client) FindPRsByBranch(workspace, repoSlug, branchName, state string) ([]PullRequest, error) {
 	if state == "" {
 		state = "OPEN"
 	}
@@ -175,12 +177,48 @@ func (c *Client) FindPRByBranch(workspace, repoSlug, branchName, state string) (
 
 	var page PaginatedPullRequests
 	if err := c.doRequest("GET", reqURL, nil, &page); err != nil {
-		return nil, fmt.Errorf("failed to find PR for branch %q: %w", branchName, err)
+		return nil, fmt.Errorf("failed to find PRs for branch %q: %w", branchName, err)
 	}
-	if len(page.Values) == 0 {
+
+	// Bitbucket Cloud silently ignores the state query parameter when it is
+	// combined with q=source.branch.name=..., returning PRs in every state
+	// (verified live 2026-09-24). Filter client-side so callers reliably get
+	// only PRs in the requested state.
+	matches := make([]PullRequest, 0, len(page.Values))
+	for _, pr := range page.Values {
+		if strings.EqualFold(pr.State, state) {
+			matches = append(matches, pr)
+		}
+	}
+	return matches, nil
+}
+
+// FindPRByBranch finds a single PR by source branch name and state (default:
+// OPEN). If multiple PRs match, the first one returned by the API is used;
+// callers that must disambiguate should use FindPRsByBranch instead.
+func (c *Client) FindPRByBranch(workspace, repoSlug, branchName, state string) (*PullRequest, error) {
+	prs, err := c.FindPRsByBranch(workspace, repoSlug, branchName, state)
+	if err != nil {
+		return nil, err
+	}
+	if len(prs) == 0 {
+		if state == "" {
+			state = "OPEN"
+		}
 		return nil, fmt.Errorf("no %s PR found for branch %q", state, branchName)
 	}
-	return &page.Values[0], nil
+	return &prs[0], nil
+}
+
+// GetPullRequest returns a single pull request by id.
+func (c *Client) GetPullRequest(workspace, repoSlug string, id int) (*PullRequest, error) {
+	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests/%d",
+		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), id)
+	var pr PullRequest
+	if err := c.doRequest("GET", reqURL, nil, &pr); err != nil {
+		return nil, fmt.Errorf("failed to get pull request #%d: %w", id, err)
+	}
+	return &pr, nil
 }
 
 // MergePR merges a pull request.
@@ -194,14 +232,18 @@ func (c *Client) MergePR(workspace, repoSlug string, prID int, req MergePRReques
 func (c *Client) DeclinePR(workspace, repoSlug string, prID int) error {
 	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests/%d/decline",
 		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), prID)
-	return c.doRequest("POST", reqURL, nil, nil)
+	// Bitbucket Cloud rejects a POST that declares Content-Type: application/json
+	// but carries a zero-length body (400 Bad Request), so send an empty JSON
+	// object rather than no body at all.
+	return c.doRequest("POST", reqURL, struct{}{}, nil)
 }
 
 // ApprovePR approves a pull request.
 func (c *Client) ApprovePR(workspace, repoSlug string, prID int) error {
 	reqURL := fmt.Sprintf("%s/repositories/%s/%s/pullrequests/%d/approve",
 		baseURL, url.PathEscape(workspace), url.PathEscape(repoSlug), prID)
-	return c.doRequest("POST", reqURL, nil, nil)
+	// See DeclinePR: an empty body with Content-Type: application/json is rejected.
+	return c.doRequest("POST", reqURL, struct{}{}, nil)
 }
 
 // UpdatePR updates a pull request (e.g., to add reviewers).

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -36,25 +35,13 @@ func newPREditCmd(runF func(*prEditOptions) error) *cobra.Command {
 			}
 
 			opts.titleEdited = cmd.Flags().Changed("title")
-			bodyProvided := cmd.Flags().Changed("body")
-			bodyFileProvided := cmd.Flags().Changed("body-file")
-			if bodyProvided && bodyFileProvided {
-				return fmt.Errorf("specify only one of --body or --body-file")
+			bodyText, bodyProvided, err := resolveBodyOverride(cmd, opts.body, bodyFile)
+			if err != nil {
+				return err
 			}
-
-			opts.bodyEdited = bodyProvided || bodyFileProvided
-			if bodyFileProvided {
-				var data []byte
-				var err error
-				if bodyFile == "-" {
-					data, err = io.ReadAll(cmd.InOrStdin())
-				} else {
-					data, err = os.ReadFile(bodyFile)
-				}
-				if err != nil {
-					return fmt.Errorf("read body file: %w", err)
-				}
-				opts.body = string(data)
+			opts.bodyEdited = bodyProvided
+			if bodyProvided {
+				opts.body = bodyText
 			}
 
 			if !opts.titleEdited && !opts.bodyEdited {

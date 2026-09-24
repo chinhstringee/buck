@@ -18,11 +18,13 @@ var (
 	prFlagDestination string
 	prFlagTitle       string
 	prFlagInteractive bool
+	prFlagBody        string
+	prFlagBodyFile    string
 )
 
 var prCmd = &cobra.Command{
 	Use:   "pr [branch-name]",
-	Short: "Pull request operations (create, edit, merge, decline, approve, list)",
+	Short: "Pull request operations (create, view, edit, merge, decline, approve, list)",
 	Long:  "Create and manage pull requests across multiple Bitbucket repos.\nRun without subcommand to create PRs (backward compatible).",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runPR,
@@ -38,6 +40,8 @@ func init() {
 	// Create-only flags
 	prCmd.Flags().StringVarP(&prFlagDestination, "destination", "d", "", "destination branch (default: master)")
 	prCmd.Flags().StringVarP(&prFlagTitle, "title", "t", "", "PR title (default: derived from branch name)")
+	prCmd.Flags().StringVarP(&prFlagBody, "body", "b", "", "PR description (default: derived from commits)")
+	prCmd.Flags().StringVarP(&prFlagBodyFile, "body-file", "F", "", "Read PR description from file (use \"-\" for standard input)")
 
 	_ = prCmd.RegisterFlagCompletionFunc("group", completeGroupNames)
 	_ = prCmd.RegisterFlagCompletionFunc("repos", completeRepoSlugs)
@@ -105,6 +109,15 @@ func runPR(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	bodyText, bodyProvided, err := resolveBodyOverride(cmd, prFlagBody, prFlagBodyFile)
+	if err != nil {
+		return err
+	}
+	var descriptionOverride *string
+	if bodyProvided {
+		descriptionOverride = &bodyText
+	}
+
 	bold := color.New(color.Bold)
 
 	if prFlagDryRun {
@@ -116,13 +129,22 @@ func runPR(cmd *cobra.Command, args []string) error {
 		for _, r := range repos {
 			fmt.Printf("  - %s/%s\n", workspace, r)
 		}
+		if bodyProvided {
+			source := "--body"
+			if cmd.Flags().Changed("body-file") {
+				source = "--body-file"
+			}
+			fmt.Printf("  Description override: %s (%d bytes)\n", source, len(bodyText))
+		} else {
+			fmt.Println("  Description: derived from commits")
+		}
 		return nil
 	}
 
 	bold.Printf("Creating PRs from %q across %d repos...\n", branchName, len(repos))
 
 	pc := pullrequest.NewPRCreator(client)
-	results := pc.CreatePRs(workspace, repos, branchName, prFlagDestination, prFlagTitle)
+	results := pc.CreatePRs(workspace, repos, branchName, prFlagDestination, prFlagTitle, descriptionOverride)
 	pullrequest.PrintResults(results)
 
 	return nil

@@ -52,8 +52,16 @@ type CreatePullRequestRequest struct {
 }
 
 // PRBranchRef wraps a branch name reference for PR source/destination.
+// Commit is populated by Bitbucket on read (GET/POST responses) and is never
+// sent on write requests (CreatePullRequestRequest), so it is omitted when empty.
 type PRBranchRef struct {
 	Branch PRBranchName `json:"branch"`
+	Commit *PRCommitRef `json:"commit,omitempty"`
+}
+
+// PRCommitRef holds the commit hash a PR source/destination branch points to.
+type PRCommitRef struct {
+	Hash string `json:"hash"`
 }
 
 // PRBranchName holds a branch name.

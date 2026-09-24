@@ -138,7 +138,7 @@ buck create feature/new-feature
 |------|-------|-------------|
 | `--group` | `-g` | Use predefined repo group from config |
 | `--repos` | `-r` | Comma-separated repo slugs |
-| `--from` | `-f` | Source branch (overrides config default) |
+| `--from` | `-f` | Source branch name or full commit hash (overrides config default) |
 | `--dry-run` | | Preview without executing |
 | `--interactive` | `-i` | Force interactive selection |
 | `--config` | | Custom config file path |
@@ -177,6 +177,15 @@ buck create bugfix/cors --repos api-repo,web-repo
 ```bash
 buck create release/v2.0 --from develop
 ```
+
+**From a specific commit (full SHA):**
+
+```bash
+buck create test/hotfix-check --from 4c0ae8c66faf786f59aa7b5b2ef567c43d890277 --repos api-repo
+```
+
+`--from` is passed as-is to Bitbucket's branch target, which resolves both
+branch names and full commit hashes. Verified live 2026-09-24.
 
 **Preview without creating:**
 
@@ -227,6 +236,8 @@ buck pr feature/auth
 | `--repos` | `-r` | Comma-separated repo slugs |
 | `--source` | `-s` | Source branch (defaults to target branch name) |
 | `--destination` | `-d` | Destination branch (defaults to `master`) |
+| `--body` | `-b` | PR description text (default: derived from commits) |
+| `--body-file` | `-F` | Read PR description from a file; use `-` for standard input. Mutually exclusive with `--body` |
 | `--dry-run` | | Preview without creating |
 | `--interactive` | `-i` | Force interactive selection |
 | `--config` | | Custom config file path |
@@ -287,6 +298,46 @@ Dry run: would create PRs from "feature/test" to "master" in:
 
 ```bash
 buck pr feature/auth --interactive
+```
+
+**Custom description (overrides the commit-derived default):**
+
+```bash
+buck pr feature/auth --repos api-repo --body "Reviewed summary of the change"
+buck pr feature/auth --repos api-repo --body-file description.md
+buck pr feature/auth --repos api-repo --body-file - < description.md
+```
+
+`--dry-run` prints the description source (`--body`/`--body-file`) and its byte
+length instead of making a network call.
+
+---
+
+### `buck pr view [branch-name]`
+
+Show one pull request's full details — state, source/destination, source head
+commit, author, reviewers with approval, timestamps, URL, and description.
+Read-only (GET only); replaces ad-hoc REST reads for inspecting a single PR.
+
+Resolve by branch (default state `OPEN`) or by `--id` (requires exactly one
+resolved repository). If several PRs in a repo match the branch and state,
+`pr view` lists their ids instead of guessing and asks you to rerun with `--id`.
+
+#### Options
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--id` | | Pull request id; requires exactly one resolved repository |
+| `--state` | | Filter when resolving by branch: `OPEN` (default), `MERGED`, `DECLINED`, `SUPERSEDED` |
+| `--full` | | Show the untruncated source commit hash (default: short, 7 chars) |
+| `--repos` | `-r` | Comma-separated repo slugs |
+| `--group` | `-g` | Use predefined repo group from config |
+| `--interactive` | `-i` | Force interactive selection |
+
+```bash
+buck pr view feature/auth --repos api-repo
+buck pr view --id 42 --repos api-repo
+buck pr view feature/auth --repos api-repo --state MERGED --full
 ```
 
 ---

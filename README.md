@@ -67,7 +67,12 @@ buck pr                       # auto-detect branch and repo from CWD
 buck pr <branch> --repos repo-a,repo-b
 buck pr <branch> --group backend --destination develop
 buck pr <branch> --repos repo-a --title "Add login feature"
+buck pr <branch> --repos repo-a --body-file description.md   # description overrides commit-derived default
+buck pr <branch> --repos repo-a --body-file - < description.md
 buck pr <branch> --dry-run
+buck pr view <branch> --repos repo-a                          # inspect one PR (read-only)
+buck pr view --id 42 --repos repo-a
+buck pr view <branch> --repos repo-a --state MERGED --full
 buck pr edit 23 --repos repo-a --title "Updated title"
 buck pr edit 23 --repos repo-a --body-file description.md
 buck pr edit 23 --repos repo-a --body-file - < description.md
@@ -85,12 +90,20 @@ buck completion zsh           # generate shell completion script
 |------|-------|-------------|
 | `--repos` | `-r` | Comma-separated patterns (fuzzy match) |
 | `--group` | `-g` | Use a predefined repo group from config |
-| `--from` | `-f` | Source branch (overrides config default) |
+| `--from` | `-f` | Source branch or full commit hash (overrides config default) |
 | `--destination` | `-d` | PR destination branch (default: master) |
 | `--title` | `-t` | PR title (default: derived from branch name) |
+| `--body` | `-b` | PR description text (default: derived from commits) |
+| `--body-file` | `-F` | Read PR description from a file (`-` for stdin); mutually exclusive with `--body` |
 | `--dry-run` | | Preview without executing |
 | `--interactive` | `-i` | Force interactive selection |
 | `--config` | | Custom config file path |
+
+`buck pr view` also accepts `--id <n>` (look up by PR id; requires exactly one
+resolved repo), `--state` (OPEN/MERGED/DECLINED/SUPERSEDED, default OPEN), and
+`--full` (show the untruncated source commit hash). If several PRs in a repo
+match the branch and state, `pr view` lists their ids and asks you to rerun
+with `--id` instead of guessing.
 
 ## Configuration
 
